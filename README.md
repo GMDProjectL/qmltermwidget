@@ -7,10 +7,22 @@ At the moment this plugin is powering cool-retro-term and the ubuntu-terminal-ap
 
 This package also contains a simple test application.
 
-To build it:
+# Building
 
-qmake && make
+```bash
+mkdir build && cd build
+qmake6 .. && make -j6
+```
+
+## Installing
+
+```bash
+cd build
+sudo make install
+```
 
 To test it:
 
+```bash
 qmlscene -I . test-app/test-app.qml
+```
