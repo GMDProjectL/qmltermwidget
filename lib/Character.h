@@ -78,7 +78,7 @@ public:
   union
   {
     /** The unicode character value for this character. */
-    wchar_t character;
+    char16_t character;
     /**
      * Experimental addition which allows a single Character instance to contain more than
      * one unicode character.

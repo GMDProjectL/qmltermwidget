@@ -29,6 +29,7 @@
 // Konsole
 #include "KeyboardTranslator.h"
 #include "HistorySearch.h"
+#include "qapplication.h"
 
 KSession::KSession(QObject *parent) :
     QObject(parent), m_session(createSession(""))
@@ -70,7 +71,7 @@ Session *KSession::createSession(QString name)
     //cool-old-term: There is another check in the code. Not sure if useful.
 
     QString envshell = getenv("SHELL");
-    QString shellProg = envshell != NULL ? envshell : "/bin/bash";
+    QString shellProg = envshell.isEmpty() ? envshell : "/bin/bash";
     session->setProgram(shellProg);
 
     setenv("TERM", "xterm", 1);
@@ -256,7 +257,7 @@ void KSession::clearScreen()
 
 void KSession::search(const QString &regexp, int startLine, int startColumn, bool forwards)
 {
-    HistorySearch *history = new HistorySearch( QPointer<Emulation>(m_session->emulation()), QRegExp(regexp), forwards, startColumn, startLine, this);
+    HistorySearch *history = new HistorySearch( QPointer<Emulation>(m_session->emulation()), QRegularExpression(regexp), forwards, startColumn, startLine, this);
     connect( history, SIGNAL(matchFound(int,int,int,int)), this, SIGNAL(matchFound(int,int,int,int)));
     connect( history, SIGNAL(noMatchFound()), this, SIGNAL(noMatchFound()));
     history->search();
@@ -306,4 +307,9 @@ bool KSession::hasActiveProcess() const
 QString KSession::foregroundProcessName()
 {
     return m_session->foregroundProcessName();
+}
+
+QString KSession::currentDir() 
+{
+    return m_session->currentDir();
 }

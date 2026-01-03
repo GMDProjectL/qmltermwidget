@@ -28,7 +28,7 @@ Item {
 
     Connections {
         target: terminal
-        onScrollbarValueChanged: showScrollbar();
+        onScrollbarValueChanged: showScrollbar()
     }
 
     Timer {

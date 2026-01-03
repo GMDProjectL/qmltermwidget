@@ -32,9 +32,9 @@
 #include "kprocess.h"
 #include "kptydevice.h"
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <unistd.h>
-#include <signal.h>
+#include <csignal>
 #include <QDebug>
 
 KPtyProcess::KPtyProcess(QObject *parent) :
@@ -46,6 +46,10 @@ KPtyProcess::KPtyProcess(QObject *parent) :
     d->pty->open();
     connect(this, SIGNAL(stateChanged(QProcess::ProcessState)),
             SLOT(_k_onStateChanged(QProcess::ProcessState)));
+
+    setChildProcessModifier([this] {
+        setupKtyChildProcess();
+    });
 }
 
 KPtyProcess::KPtyProcess(int ptyMasterFd, QObject *parent) :
@@ -77,7 +81,7 @@ KPtyProcess::~KPtyProcess()
     if (state() != QProcess::NotRunning)
     {
         qWarning() << Q_FUNC_INFO << "the terminal process is still running, trying to stop it by SIGHUP";
-        ::kill(pid(), SIGHUP);
+        ::kill(static_cast<pid_t>(processId()), SIGHUP);
         waitForFinished(300);
         if (state() != QProcess::NotRunning)
             qCritical() << Q_FUNC_INFO << "process didn't stop upon SIGHUP and will be SIGKILL-ed";
@@ -119,7 +123,7 @@ KPtyDevice *KPtyProcess::pty() const
     return d->pty;
 }
 
-void KPtyProcess::setupChildProcess()
+void KPtyProcess::setupKtyChildProcess()
 {
     Q_D(KPtyProcess);
 
@@ -137,8 +141,6 @@ void KPtyProcess::setupChildProcess()
 
     if (d->ptyChannels & StderrChannel)
         dup2(d->pty->slaveFd(), 2);
-
-    KProcess::setupChildProcess();
 }
 
 //#include "kptyprocess.moc"

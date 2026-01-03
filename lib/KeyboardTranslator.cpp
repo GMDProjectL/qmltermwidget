@@ -23,8 +23,8 @@
 #include "KeyboardTranslator.h"
 
 // System
-#include <ctype.h>
-#include <stdio.h>
+#include <cctype>
+#include <cstdio>
 
 // Qt
 #include <QBuffer>
@@ -34,6 +34,9 @@
 #include <QKeySequence>
 #include <QDir>
 #include <QtDebug>
+
+#include <QtCore5Compat/QRegExp>
+#include <QtCore5Compat/QStringRef>
 
 #include "tools.h"
 
@@ -49,6 +52,13 @@ const QByteArray KeyboardTranslatorManager::defaultTranslatorText(
 "keyboard \"Fallback Key Translator\"\n"
 "key Tab : \"\\t\""
 );
+
+#ifdef Q_OS_MAC
+// On Mac, Qt::ControlModifier means Cmd, and MetaModifier means Ctrl
+const Qt::KeyboardModifier KeyboardTranslator::CTRL_MOD = Qt::MetaModifier;
+#else
+const Qt::KeyboardModifier KeyboardTranslator::CTRL_MOD = Qt::ControlModifier;
+#endif
 
 KeyboardTranslatorManager::KeyboardTranslatorManager()
     : _haveLoadedAll(false)
@@ -71,7 +81,6 @@ void KeyboardTranslatorManager::findTranslators()
     filters << QLatin1String("*.keytab");
     dir.setNameFilters(filters);
     QStringList list = dir.entryList(filters);
-    list = dir.entryList(filters);
 //    QStringList list = KGlobal::dirs()->findAllResources("data",
 //                                                         "konsole/*.keytab",
 //                                                        KStandardDirs::NoDuplicates);
@@ -103,7 +112,7 @@ const KeyboardTranslator* KeyboardTranslatorManager::findTranslator(const QStrin
 
     KeyboardTranslator* translator = loadTranslator(name);
 
-    if ( translator != 0 )
+    if ( translator != nullptr )
         _translators[name] = translator;
     else if ( !name.isEmpty() )
         qDebug() << "Unable to load translator" << name;
@@ -149,7 +158,7 @@ KeyboardTranslator* KeyboardTranslatorManager::loadTranslator(const QString& nam
 
     QFile source(path);
     if (name.isEmpty() || !source.open(QIODevice::ReadOnly | QIODevice::Text))
-        return 0;
+        return nullptr;
 
     return loadTranslator(&source,name);
 }
@@ -186,7 +195,7 @@ KeyboardTranslator* KeyboardTranslatorManager::loadTranslator(QIODevice* source,
     else
     {
         delete translator;
-        return 0;
+        return nullptr;
     }
 }
 
@@ -447,8 +456,7 @@ bool KeyboardTranslatorReader::parseAsKeyCode(const QString& item , int& keyCode
     QKeySequence sequence = QKeySequence::fromString(item);
     if ( !sequence.isEmpty() )
     {
-        keyCode = sequence[0];
-
+        keyCode = sequence[0].toCombined();
         if ( sequence.count() > 1 )
         {
             qDebug() << "Unhandled key codes in sequence: " << item;
@@ -469,7 +477,7 @@ QString KeyboardTranslatorReader::description() const
 {
     return _description;
 }
-bool KeyboardTranslatorReader::hasNextEntry()
+bool KeyboardTranslatorReader::hasNextEntry() const
 {
     return _hasNext;
 }
@@ -614,6 +622,11 @@ bool KeyboardTranslator::Entry::matches(int keyCode ,
                                         Qt::KeyboardModifiers modifiers,
                                         States testState) const
 {
+#ifdef Q_OS_MAC
+    // On Mac, arrow keys are considered part of keypad. Ignore that.
+    modifiers &= ~Qt::KeypadModifier;
+#endif
+
     if ( _keyCode != keyCode )
         return false;
 
@@ -621,7 +634,7 @@ bool KeyboardTranslator::Entry::matches(int keyCode ,
         return false;
 
     // if modifiers is non-zero, the 'any modifier' state is implicit
-    if ( modifiers != 0 )
+    if ( (modifiers & ~Qt::KeypadModifier) != 0 )
         testState |= AnyModifierState;
 
     if ( (testState & _stateMask) != (_state & _stateMask) )
@@ -665,7 +678,8 @@ QByteArray KeyboardTranslator::Entry::escapedText(bool expandWildCards,Qt::Keybo
 
         if ( replacement == 'x' )
         {
-            result.replace(i,1,"\\x"+QByteArray(1,ch).toHex());
+            QByteArray data = "\\x"+QByteArray(1,ch).toHex();
+            result.replace(i,1,data);
         } else if ( replacement != 0 )
         {
             result.remove(i,1);
@@ -683,7 +697,7 @@ QByteArray KeyboardTranslator::Entry::unescape(const QByteArray& input) const
     for ( int i = 0 ; i < result.count()-1 ; i++ )
     {
 
-        QByteRef ch = result[i];
+        auto ch = result[i];
         if ( ch == '\\' )
         {
            char replacement[2] = {0,0};
@@ -722,7 +736,7 @@ QByteArray KeyboardTranslator::Entry::unescape(const QByteArray& input) const
            }
 
            if ( escapedChar )
-               result.replace(i,charsToRemove,replacement,1);
+               result.replace(i,charsToRemove,replacement);
         }
     }
 

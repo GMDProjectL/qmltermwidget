@@ -19,16 +19,17 @@
 #ifndef _SEARCHBAR_H
 #define	_SEARCHBAR_H
 
-#include <QRegExp>
 
 #include "ui_SearchBar.h"
 #include "HistorySearch.h"
 
+#include <QRegularExpression>
+
 class SearchBar : public QWidget {
     Q_OBJECT
 public:
-    SearchBar(QWidget* parent = 0);
-    virtual ~SearchBar();
+    SearchBar(QWidget* parent = nullptr);
+    ~SearchBar() override;
     virtual void show();
     QString searchText();
     bool useRegularExpression();
@@ -45,7 +46,7 @@ signals:
     void findPrevious();
 
 protected:
-    virtual void keyReleaseEvent(QKeyEvent* keyEvent);
+    void keyReleaseEvent(QKeyEvent* keyEvent) override;
 
 private slots:
     void clearBackgroundColor();

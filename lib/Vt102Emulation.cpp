@@ -23,6 +23,8 @@
 // Own
 #include "Vt102Emulation.h"
 #include "mac-vkcode.h"
+#include "tools.h"
+
 
 // XKB
 //#include <config-konsole.h>
@@ -39,13 +41,15 @@
 #endif
 
 // Standard
-#include <stdio.h>
+#include <cstdio>
 #include <unistd.h>
 
 // Qt
 #include <QEvent>
 #include <QKeyEvent>
-#include <QByteRef>
+#include <QByteArrayView>
+#include <QtCore5Compat/QTextCodec>
+#include <QDebug>
 
 // KDE
 //#include <kdebug.h>
@@ -344,7 +348,7 @@ void Vt102Emulation::receiveChar(wchar_t cc)
 
     if (epe(   )) { processToken( TY_CSI_PE(cc), 0, 0); resetTokenizer(); return; }
     if (ees(DIG)) { addDigit(cc-'0'); return; }
-    if (eec(';')) { addArgument();    return; }
+    if (eec(';') || eec(':')) { addArgument(); return; }
     for (int i=0;i<=argc;i++)
     {
         if (epp())
@@ -416,10 +420,10 @@ void Vt102Emulation::processWindowAttributeChange()
     return;
   }
 
-  QString newValue;
-  newValue.reserve(tokenBufferPos-i-2);
-  for (int j = 0; j < tokenBufferPos-i-2; j++)
-    newValue[j] = tokenBuffer[i+1+j];
+  // copy from the first char after ';', and skipping the ending delimiter
+  // 0x07 or 0x92. Note that as control characters in OSC text parts are
+  // ignored, only the second char in ST ("\e\\") is appended to tokenBuffer.
+  QString newValue = QString::fromWCharArray(tokenBuffer + i + 1, tokenBufferPos-i-2);
 
   _pendingTitleUpdates[attributeToChange] = newValue;
   _titleUpdateTimer->start(20);
@@ -873,8 +877,12 @@ void Vt102Emulation::sendString(const char* s , int length)
 
 void Vt102Emulation::reportCursorPosition()
 {
-  char tmp[20];
-  sprintf(tmp,"\033[%d;%dR",_currentScreen->getCursorY()+1,_currentScreen->getCursorX()+1);
+  const size_t sz = 20;
+  char tmp[sz];
+  const size_t r = snprintf(tmp, sz, "\033[%d;%dR",_currentScreen->getCursorY()+1,_currentScreen->getCursorX()+1);
+  if (sz <= r) {
+    qWarning("Vt102Emulation::reportCursorPosition: Buffer too small\n");
+  }
   sendString(tmp);
 }
 
@@ -904,8 +912,12 @@ void Vt102Emulation::reportSecondaryAttributes()
 void Vt102Emulation::reportTerminalParms(int p)
 // DECREPTPARM
 {
-  char tmp[100];
-  sprintf(tmp,"\033[%d;1;1;112;112;1;0x",p); // not really true.
+  const size_t sz = 100;
+  char tmp[sz];
+  const size_t r = snprintf(tmp, sz, "\033[%d;1;1;112;112;1;0x",p); // not really true.
+  if (sz <= r) {
+    qWarning("Vt102Emulation::reportTerminalParms: Buffer too small\n");
+  }
   sendString(tmp);
 }
 
@@ -964,8 +976,8 @@ void Vt102Emulation::sendMouseEvent( int cb, int cx, int cy , int eventType )
             // coordinate+32, no matter what the locale is. We could easily
             // convert manually, but QString can also do it for us.
             QChar coords[2];
-            coords[0] = cx + 0x20;
-            coords[1] = cy + 0x20;
+            coords[0] = QChar(cx + 0x20);
+            coords[1] = QChar(cy + 0x20);
             QString coordsStr = QString(coords, 2);
             QByteArray utf8 = coordsStr.toUtf8();
             snprintf(command, sizeof(command), "\033[M%c%s", cb + 0x20, utf8.constData());
@@ -1011,9 +1023,10 @@ void Vt102Emulation::sendText( const QString& text )
                     0,
                     Qt::NoModifier,
                     text);
-    sendKeyEvent(&event); // expose as a big fat keypress event
+    sendKeyEvent(&event, false); // expose as a big fat keypress event
   }
 }
+//<<<<<<< HEAD
 
 QKeyEvent * Vt102Emulation::remapKeyModifiersForMac(QKeyEvent *event) {
   Qt::KeyboardModifiers modifiers = event->modifiers();
@@ -1036,129 +1049,12 @@ QKeyEvent * Vt102Emulation::remapKeyModifiersForMac(QKeyEvent *event) {
     modifiers &= ~Qt::ControlModifier;
   }
 
-  QString eventText = event->text();
-  int eventKey = event->key();
-  // disable dead key
-  bool isAscii = true;
-  switch (event->nativeVirtualKey()) {
-    case kVK_ANSI_B:
-    eventText = "b";
-    eventKey = Qt::Key_B;
-    break;
-    case kVK_ANSI_C:
-    eventText = "c";
-    eventKey = Qt::Key_C;
-    break;
-    case kVK_ANSI_D:
-    eventText = "d";
-    eventKey = Qt::Key_D;
-    break;
-    case kVK_ANSI_E:
-    eventText = "e";
-    eventKey = Qt::Key_E;
-    break;
-    case kVK_ANSI_F:
-    eventText = "f";
-    eventKey = Qt::Key_F;
-    break;
-    case kVK_ANSI_G:
-    eventText = "g";
-    eventKey = Qt::Key_G;
-    break;
-    case kVK_ANSI_H:
-    eventText = "h";
-    eventKey = Qt::Key_H;
-    break;
-    case kVK_ANSI_I:
-    eventText = "i";
-    eventKey = Qt::Key_I;
-    break;
-    case kVK_ANSI_J:
-    eventText = "j";
-    eventKey = Qt::Key_J;
-    break;
-    case kVK_ANSI_K:
-    eventText = "k";
-    eventKey = Qt::Key_K;
-    break;
-    case kVK_ANSI_L:
-    eventText = "l";
-    eventKey = Qt::Key_L;
-    break;
-    case kVK_ANSI_M:
-    eventText = "m";
-    eventKey = Qt::Key_M;
-    break;
-    case kVK_ANSI_N:
-    eventText = "n";
-    eventKey = Qt::Key_N;
-    break;
-    case kVK_ANSI_O:
-    eventText = "o";
-    eventKey = Qt::Key_O;
-    break;
-    case kVK_ANSI_P:
-    eventText = "p";
-    eventKey = Qt::Key_P;
-    break;
-    case kVK_ANSI_Q:
-    eventText = "q";
-    eventKey = Qt::Key_Q;
-    break;
-    case kVK_ANSI_R:
-    eventText = "r";
-    eventKey = Qt::Key_R;
-    break;
-    case kVK_ANSI_S:
-    eventText = "s";
-    eventKey = Qt::Key_S;
-    break;
-    case kVK_ANSI_T:
-    eventText = "t";
-    eventKey = Qt::Key_T;
-    break;
-    case kVK_ANSI_U:
-    eventText = "u";
-    eventKey = Qt::Key_U;
-    break;
-    case kVK_ANSI_V:
-    eventText = "v";
-    eventKey = Qt::Key_V;
-    break;
-    case kVK_ANSI_W:
-    eventText = "w";
-    eventKey = Qt::Key_W;
-    break;
-    case kVK_ANSI_X:
-    eventText = "x";
-    eventKey = Qt::Key_X;
-    break;
-    case kVK_ANSI_Y:
-    eventText = "y";
-    eventKey = Qt::Key_Y;
-    break;
-    case kVK_ANSI_Z:
-    eventText = "z";
-    eventKey = Qt::Key_Z;
-    break;
-    default:
-    isAscii = false;
-  }
-  // a's vk code is 0, a special case
-  if (event->nativeVirtualKey() == kVK_ANSI_A && event->key() == Qt::Key_A) {
-    eventText = "a";
-    eventKey = Qt::Key_A;
-    isAscii = true;
-  }
-  if (modifiers & Qt::ShiftModifier && isAscii) {
-    eventText = eventText.toUpper();
-  }
-  return new QKeyEvent(QEvent::None, eventKey, modifiers,
+  return new QKeyEvent(QEvent::None, event->key(), modifiers,
                       event->nativeScanCode(), event->nativeVirtualKey(), event->nativeModifiers(),
-                      eventText, event->isAutoRepeat(), event->count());
+                      event->text(), event->isAutoRepeat(), event->count());
 }
 
-void Vt102Emulation::sendKeyEvent( QKeyEvent* origEvent )
+void Vt102Emulation::sendKeyEvent(QKeyEvent* origEvent, bool fromPaste)
 {
 #if defined(Q_OS_MAC)
     QScopedPointer<QKeyEvent> event(remapKeyModifiersForMac(origEvent));
@@ -1177,7 +1073,7 @@ void Vt102Emulation::sendKeyEvent( QKeyEvent* origEvent )
         states |= KeyboardTranslator::ApplicationKeypadState;
 
     // check flow control state
-    if (modifiers & Qt::ControlModifier)
+    if (modifiers & KeyboardTranslator::CTRL_MOD)
     {
         switch (event->key()) {
         case Qt::Key_S:
@@ -1223,16 +1119,19 @@ void Vt102Emulation::sendKeyEvent( QKeyEvent* origEvent )
 
         if ( entry.command() != KeyboardTranslator::NoCommand )
         {
-            if (entry.command() & KeyboardTranslator::EraseCommand)
+            if (entry.command() & KeyboardTranslator::EraseCommand) {
                 textToSend += eraseChar();
+            } else {
+                Q_EMIT handleCommandFromKeyboard(entry.command());
+            }
 
             // TODO command handling
         }
         else if ( !entry.text().isEmpty() )
         {
-            textToSend += entry.text(true,modifiers);
+            textToSend += _codec->fromUnicode(QString::fromUtf8(entry.text(true,modifiers)));
         }
-        else if((modifiers & Qt::ControlModifier) && event->key() >= 0x40 && event->key() < 0x5f) {
+        else if((modifiers & KeyboardTranslator::CTRL_MOD) && event->key() >= 0x40 && event->key() < 0x5f) {
             textToSend += (event->key() & 0x1f);
         }
         else if(event->key() == Qt::Key_Tab) {
@@ -1244,11 +1143,23 @@ void Vt102Emulation::sendKeyEvent( QKeyEvent* origEvent )
         else if (event->key() == Qt::Key_PageDown) {
             textToSend += "\033[6~";
         }
-        else {
+        else if (event->text().length() > 0) {
             textToSend += _codec->fromUnicode(event->text());
         }
+        else if (event->key() <= 0xFFFF) {
+            QChar c(event->key());
 
-        sendData( textToSend.constData() , textToSend.length() );
+            if (c.isLetter()) {
+                c = ((modifiers & Qt::ShiftModifier) != 0) ? c.toUpper() : c.toLower();
+            }
+
+            textToSend += _codec->fromUnicode(QString(c));
+        }
+
+        if (!fromPaste && textToSend.length()) {
+            Q_EMIT outputFromKeypressEvent();
+        }
+        Q_EMIT sendData( textToSend.constData() , textToSend.length() );
     }
     else
     {
@@ -1494,36 +1405,19 @@ char Vt102Emulation::eraseChar() const
 {
   KeyboardTranslator::Entry entry = _keyTranslator->findEntry(
                                             Qt::Key_Backspace,
-                                            0,
-                                            0);
+                                            Qt::NoModifier,
+                                            KeyboardTranslator::NoState);
   if ( entry.text().count() > 0 )
       return entry.text().at(0);
   else
       return '\b';
 }
 
-// print contents of the scan buffer
-static void hexdump(wchar_t* s, int len)
-{ int i;
-  for (i = 0; i < len; i++)
-  {
-    if (s[i] == '\\')
-      printf("\\\\");
-    else
-    if ((s[i]) > 32 && s[i] < 127)
-      printf("%c",s[i]);
-    else
-      printf("\\%04x(hex)",s[i]);
-  }
-}
-
 void Vt102Emulation::reportDecodingError()
 {
   if (tokenBufferPos == 0 || ( tokenBufferPos == 1 && (tokenBuffer[0] & 0xff) >= 32) )
     return;
-  printf("Undecodable sequence: ");
-  hexdump(tokenBuffer,tokenBufferPos);
-  printf("\n");
+  qCDebug(qtermwidgetLogger) << "Undecodable sequence:" << QString::fromWCharArray(tokenBuffer, tokenBufferPos);
 }
 
 //#include "Vt102Emulation.moc"

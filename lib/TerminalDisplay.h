@@ -67,6 +67,13 @@ namespace Konsole
         MoveEndScreenWindow = 2
     };
 
+    enum BackgroundMode {
+        None,
+        Stretch,
+        Zoom,
+        Fit,
+        Center
+    };
 
 extern unsigned short vt100_graphics[32];
 
@@ -99,6 +106,7 @@ class KONSOLEPRIVATE_EXPORT TerminalDisplay : public QQuickPaintedItem
 
    Q_PROPERTY(bool enableBold           READ getBoldIntense   WRITE setBoldIntense NOTIFY boldIntenseChanged )
    Q_PROPERTY(bool fullCursorHeight     READ fullCursorHeight WRITE setFullCursorHeight NOTIFY fullCursorHeightChanged)
+   Q_PROPERTY(bool blinkingCursor       READ blinkingCursor   WRITE setBlinkingCursor NOTIFY blinkingCursorStateChanged)
    Q_PROPERTY(bool antialiasText        READ antialias       WRITE setAntialias)
    Q_PROPERTY(QStringList availableColorSchemes READ availableColorSchemes NOTIFY availableColorSchemesChanged)
 
@@ -137,10 +145,13 @@ public:
         /** Show the scroll bar on the right side of the display. */
         ScrollBarRight=2 
     };
-    /** 
+    /**/
 
     /** Sets the background image of the terminal display. */
-    void setBackgroundImage(QString backgroundImage);
+    void setBackgroundImage(const QString& backgroundImage);
+
+    /** Sets the background image mode of the terminal display. */
+    void setBackgroundMode(BackgroundMode mode);
 
     /**
      * Specifies whether the terminal display has a vertical scroll bar, and if so whether it
@@ -194,7 +205,7 @@ public:
      * Returns a list of menu actions created by the filters for the content
      * at the given @p position.
      */
-    QList<QAction*> filterActions(const QPoint& position, QWidget* parent);
+    QList<QAction*> filterActions(const QPoint& position);
 
     /** Returns true if the cursor is set to blink or false otherwise. */
     bool blinkingCursor() { return _hasBlinkingCursor; }
@@ -232,7 +243,7 @@ public:
     void emitSelection(bool useXselection,bool appendReturn);
 
     /** change and wrap text corresponding to paste mode **/
-    void bracketText(QString& text);
+    void bracketText(QString& text) const;
 
     /**
      * Sets the shape of the keyboard cursor.  This is the cursor drawn
@@ -388,6 +399,12 @@ public:
     static bool antialias()                 { return _antialiasText;   }
 
     /**
+     * Specify whether line chars should be drawn by ourselves or left to
+     * underlying font rendering libraries.
+     */
+    void setDrawLineChars(bool drawLineChars) { _drawLineChars = drawLineChars; }
+
+    /**
      * Specifies whether characters with intense colors should be rendered
      * as bold. Defaults to true.
      */
@@ -443,11 +460,16 @@ public:
 
     void setMotionAfterPasting(MotionAfterPasting action);
     int motionAfterPasting();
+    void setConfirmMultilinePaste(bool confirmMultilinePaste);
+    void setTrimPastedTrailingNewlines(bool trimPastedTrailingNewlines);
 
     // maps a point on the widget to the position ( ie. line and column )
     // of the character at that point.
 
-    void getCharacterPosition(const QPoint& widgetPoint,int& line,int& column) const;
+    void getCharacterPosition(const QPointF& widgetPoint,int& line,int& column) const;
+
+    void disableBracketedPasteMode(bool disable) { _disabledBracketedPasteMode = disable; }
+    bool bracketedPasteModeIsDisabled() const { return _disabledBracketedPasteMode; }
 
 public slots:
 
@@ -542,6 +564,7 @@ public slots:
      */
     void setForegroundColor(const QColor& color);
 
+    void setColorTableColor(const int colorId, const QColor &color);
     void selectionChanged();
 
     // QMLTermWidget
@@ -550,6 +573,7 @@ public slots:
     QStringList availableColorSchemes();
 
     void simulateKeyPress(int key, int modifiers, bool pressed, quint32 nativeScanCode, const QString &text);
+    void simulateKeySequence(const QKeySequence &sequence);
     void simulateWheel(int x, int y, int buttons, int modifiers, QPointF angleDelta);
     void simulateMouseMove(int x, int y, int button, int buttons, int modifiers);
     void simulateMousePress(int x, int y, int button, int buttons, int modifiers);
@@ -561,7 +585,7 @@ signals:
     /**
      * Emitted when the user presses a key whilst the terminal widget has focus.
      */
-    void keyPressedSignal(QKeyEvent *e);
+    void keyPressedSignal(QKeyEvent *e, bool fromPaste);
 
     /**
      * A mouse event occurred.
@@ -615,33 +639,32 @@ signals:
     void availableColorSchemesChanged();
     void colorSchemeChanged();
     void fullCursorHeightChanged();
+    void blinkingCursorStateChanged();
     void boldIntenseChanged();
 
 protected:
-    virtual bool event( QEvent * );
+    bool event( QEvent * ) override;
 
-    //virtual void paintEvent( QPaintEvent * );
-
-    virtual void showEvent(QShowEvent*);
-    virtual void hideEvent(QHideEvent*);
-    virtual void resizeEvent(QResizeEvent*);
+    void showEvent(QShowEvent*);
+    void hideEvent(QHideEvent*);
+    void resizeEvent(QResizeEvent*);
 
     virtual void fontChange(const QFont &font);
-    virtual void focusInEvent(QFocusEvent* event);
-    virtual void focusOutEvent(QFocusEvent* event);
-    virtual void keyPressEvent(QKeyEvent* event);
-    virtual void mouseDoubleClickEvent(QMouseEvent* ev);
-    virtual void mousePressEvent( QMouseEvent* );
-    virtual void mouseReleaseEvent( QMouseEvent* );
-    virtual void mouseMoveEvent( QMouseEvent* );
+    void focusInEvent(QFocusEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* ev) override;
+    void mousePressEvent( QMouseEvent* ) override;
+    void mouseReleaseEvent( QMouseEvent* ) override;
+    void mouseMoveEvent( QMouseEvent* ) override;
     virtual void extendSelection( const QPoint& pos );
-    virtual void wheelEvent( QWheelEvent* );
+    void wheelEvent( QWheelEvent* ) override;
 
-    virtual bool focusNextPrevChild( bool next );
+    bool focusNextPrevChild( bool next );
 
     // drag and drop
-    virtual void dragEnterEvent(QDragEnterEvent* event);
-    virtual void dropEvent(QDropEvent* event);
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
     void doDrag();
     enum DragState { diNone, diPending, diDragging };
 
@@ -664,14 +687,14 @@ protected:
     void mouseTripleClickEvent(QMouseEvent* ev);
 
     // reimplemented
-    virtual void inputMethodEvent ( QInputMethodEvent* event );
-    virtual QVariant inputMethodQuery( Qt::InputMethodQuery query ) const;
+    void inputMethodEvent ( QInputMethodEvent* event ) override;
+    QVariant inputMethodQuery( Qt::InputMethodQuery query ) const override;
 
     // QMLTermWidget
-    void paint(QPainter * painter);
-    virtual void geometryChanged(const QRectF & newGeometry, const QRectF & oldGeometry);
+    void paint(QPainter * painter) override;
+    virtual void geometryChange(const QRectF & newGeometry, const QRectF & oldGeometry) override;
     void inputMethodQuery(QInputMethodQueryEvent *event);
-    void itemChange(ItemChange change, const ItemChangeData & value);
+    void itemChange(ItemChange change, const ItemChangeData & value) override;
 
 protected slots:
 
@@ -719,7 +742,7 @@ private:
                                            const Character* style, bool invertCharacterColor);
     // draws a string of line graphics
     void drawLineCharString(QPainter& painter, int x, int y,
-                            const std::wstring& str, const Character* attributes);
+                            const std::wstring& str, const Character* attributes) const;
 
     // draws the preedit string for input methods
     void drawInputMethodPreeditString(QPainter& painter , const QRect& rect);
@@ -762,6 +785,9 @@ private:
     void updateCursor();
 
     bool handleShortcutOverrideEvent(QKeyEvent* event);
+
+    bool isLineChar(wchar_t c) const;
+    bool isLineCharString(const std::wstring& string) const;
 
     // the window onto the terminal screen which this display
     // is currently showing.
@@ -808,6 +834,7 @@ private:
     bool _bidiEnabled;
     bool _mouseMarks;
     bool _bracketedPasteMode;
+    bool _disabledBracketedPasteMode;
 
     QPoint  _iPntSel; // initial selection point
     QPoint  _pntSel; // current selection point
@@ -858,9 +885,10 @@ private:
 
     QSize _size;
 
-    QRgb _blendColor;
+    qreal _opacity;
 
     QPixmap _backgroundImage;
+    BackgroundMode _backgroundMode;
 
     // list of filters currently applied to the display.  used for links and
     // search highlight
@@ -875,6 +903,8 @@ private:
 
 
     MotionAfterPasting mMotionAfterPasting;
+    bool _confirmMultilinePaste;
+    bool _trimPastedTrailingNewlines;
 
     struct InputMethodData
     {
@@ -927,6 +957,8 @@ private:
 
     void setFullCursorHeight(bool val);
 
+    bool _drawLineChars;
+
 public:
     static void setTransparencyEnabled(bool enable)
     {
@@ -942,8 +974,8 @@ Q_OBJECT
 public:
     AutoScrollHandler(QWidget* parent);
 protected:
-    virtual void timerEvent(QTimerEvent* event);
-    virtual bool eventFilter(QObject* watched,QEvent* event);
+    void timerEvent(QTimerEvent* event) override;
+    bool eventFilter(QObject* watched,QEvent* event) override;
 private:
     QWidget* widget() const { return static_cast<QWidget*>(parent()); }
     int _timerId;

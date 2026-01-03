@@ -1,6 +1,6 @@
 TEMPLATE = lib
 TARGET = qmltermwidget
-QT += qml quick widgets
+QT += qml quick widgets core5compat
 CONFIG += qt plugin
 
 include(lib.pri)
@@ -17,6 +17,12 @@ INCLUDEPATH += $$PWD/src
 HEADERS += $$PWD/src/qmltermwidget_plugin.h \
           $$PWD/src/ksession.h
 
+# Copy the files useful to the plugin in DESTDIR
+QMAKE_POST_LINK = $(COPY_DIR) $$PWD/lib/color-schemes $$DESTDIR && \
+    $(COPY_DIR) $$PWD/lib/kb-layouts $$DESTDIR && \
+    $$QMAKE_COPY $$PWD/src/qmldir $$DESTDIR && \
+    $$QMAKE_COPY $$PWD/src/QMLTermScrollbar.qml $$DESTDIR
+
 SOURCES += $$PWD/src/qmltermwidget_plugin.cpp \
           $$PWD/src/ksession.cpp
 
@@ -24,12 +30,6 @@ OTHER_FILES += \
     src/QMLTermScrollbar.qml \
     test-app/test-app.qml \
     src/qmldir
-
-# Copy the files useful to the plugin in DESTDIR
-QMAKE_POST_LINK = $(COPY_DIR) $$PWD/lib/color-schemes $$DESTDIR && \
-    $(COPY_DIR) $$PWD/lib/kb-layouts $$DESTDIR && \
-    $$QMAKE_COPY $$PWD/src/qmldir $$DESTDIR && \
-    $$QMAKE_COPY $$PWD/src/QMLTermScrollbar.qml $$DESTDIR
 
 #########################################
 ## INTALLS
@@ -49,4 +49,17 @@ assets.path += $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH
 qmldir.files += $$PWD/src/qmldir
 qmldir.path += $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH
 
-INSTALLS += target qmldir assets
+colorschemes.files = $$PWD/lib/color-schemes/*
+colorschemes.path = $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH/color-schemes
+colorschemes2.files = $$PWD/lib/color-schemes/historic/*
+colorschemes2.path = $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH/color-schemes/historic
+
+kblayouts.files = $$PWD/lib/kb-layouts/*
+kblayouts.path = $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH/kb-layouts
+kblayouts2.files = $$PWD/lib/kb-layouts/historic/*
+kblayouts2.path = $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH/kb-layouts/historic
+
+scrollbar.files = $$PWD/src/QMLTermScrollbar.qml
+scrollbar.path = $$INSTALL_DIR/$$PLUGIN_IMPORT_PATH
+
+INSTALLS += target qmldir assets colorschemes colorschemes2 kblayouts kblayouts2 scrollbar

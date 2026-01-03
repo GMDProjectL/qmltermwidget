@@ -72,8 +72,8 @@ public:
      * falls back to using the program specified in the SHELL environment
      * variable.
      */
-    Session(QObject* parent = 0);
-    virtual ~Session();
+    Session(QObject* parent = nullptr);
+    ~Session() override;
 
     /**
      * Returns true if the session is currently running.  This will be true
@@ -315,6 +315,8 @@ public:
      */
     void sendText(const QString & text) const;
 
+    void sendKeyEvent(QKeyEvent* e) const;
+
     /**
      * Returns the process id of the terminal process.
      * This is the id used by the system API to refer to the process.
@@ -333,6 +335,11 @@ public:
      */
     QString foregroundProcessName();
 
+    /**
+     * Returns the current working directory of the process.
+     */
+    QString currentDir();
+
     /** Returns the terminal session's window size in lines and columns. */
     QSize size();
     /**
@@ -344,7 +351,7 @@ public:
     void setSize(const QSize & size);
 
     /** Sets the text codec used by this session's terminal emulation. */
-    void setCodec(QTextCodec * codec);
+    void setCodec(QTextCodec * codec) const;
 
     /**
      * Sets whether the session has a dark background or not.  The session
@@ -590,7 +597,7 @@ public:
     /** Constructs an empty session group. */
     SessionGroup();
     /** Destroys the session group and removes all connections between master and slave sessions. */
-    ~SessionGroup();
+    ~SessionGroup() override;
 
     /** Adds a session to the group. */
     void addSession( Session * session );
@@ -638,8 +645,8 @@ public:
     int masterMode() const;
 
 private:
-    void connectPair(Session * master , Session * other);
-    void disconnectPair(Session * master , Session * other);
+    void connectPair(Session * master , Session * other) const;
+    void disconnectPair(Session * master , Session * other) const;
     void connectAll(bool connect);
     QList<Session *> masters() const;
 
