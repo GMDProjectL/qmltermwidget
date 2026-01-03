@@ -3,7 +3,7 @@
 ## Description
 This project is a QML port of qtermwidget. It is written to be as close as possible to the upstream project in order to make cooperation possible.
 
-At the moment this plugin is powering cool-retro-term and the ubuntu-terminal-app.
+This plugin will power UniTerminal, terminal emulator for Uni desktop environment.
 
 This package also contains a simple test application.
 
@@ -24,5 +24,5 @@ sudo make install
 To test it:
 
 ```bash
-qmlscene -I . test-app/test-app.qml
+qmlscene6 -I . test-app/test-app.qml
 ```
